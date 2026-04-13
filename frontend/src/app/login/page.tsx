@@ -17,7 +17,10 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.replace('/dashboard');
+      const query = new URLSearchParams(window.location.search);
+      const next = query.get('next');
+      const safeNext = next && next.startsWith('/') ? next : '/dashboard';
+      router.replace(safeNext);
     } catch {
       toast.error('Invalid credentials');
     } finally {
