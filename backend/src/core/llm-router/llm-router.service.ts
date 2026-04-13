@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -33,23 +33,32 @@ const COST_TABLE: Record<string, { input: number; output: number }> = {
 @Injectable()
 export class LlmRouterService {
   private readonly logger = new Logger(LlmRouterService.name);
-  private openai: OpenAI;
-  private anthropic: Anthropic;
+  private openai?: OpenAI;
+  private anthropic?: Anthropic;
 
   constructor(private cfg: ConfigService) {
-    this.openai = new OpenAI({ apiKey: cfg.get('OPENAI_API_KEY') });
-    this.anthropic = new Anthropic({ apiKey: cfg.get('ANTHROPIC_API_KEY') });
+    const openAiKey = cfg.get<string>('OPENAI_API_KEY');
+    const anthropicKey = cfg.get<string>('ANTHROPIC_API_KEY');
+
+    if (this.isConfigured(openAiKey)) {
+      this.openai = new OpenAI({ apiKey: openAiKey });
+    }
+    if (this.isConfigured(anthropicKey)) {
+      this.anthropic = new Anthropic({ apiKey: anthropicKey });
+    }
   }
 
   async chat(req: LlmRequest): Promise<LlmResponse> {
     const tier = req.tier ?? 'auto';
     const tokenEstimate = Math.ceil((req.prompt.length + (req.systemPrompt?.length ?? 0)) / 4);
+    const attemptedErrors: string[] = [];
 
     // Tier routing logic
     if (tier === 'fast' || (tier === 'auto' && tokenEstimate < 500)) {
       try {
         return await this.callOllama(req);
-      } catch {
+      } catch (e) {
+        attemptedErrors.push(this.describeProviderError('Ollama', e));
         this.logger.warn('Ollama unavailable, falling back to gpt-4o-mini');
       }
     }
@@ -58,11 +67,19 @@ export class LlmRouterService {
       try {
         return await this.callOpenAi(req);
       } catch (e) {
+        attemptedErrors.push(this.describeProviderError('OpenAI', e));
         this.logger.warn(`OpenAI failed: ${(e as Error).message}, falling back to Claude`);
       }
     }
 
-    return await this.callClaude(req);
+    try {
+      return await this.callClaude(req);
+    } catch (e) {
+      attemptedErrors.push(this.describeProviderError('Claude', e));
+      this.logger.error(`Claude failed: ${(e as Error).message}`);
+      this.logger.error(`All LLM providers failed. ${attemptedErrors.join(' | ')}`);
+      throw new ServiceUnavailableException('AI service is unavailable. Please configure valid LLM API keys.');
+    }
   }
 
   private async callOllama(req: LlmRequest): Promise<LlmResponse> {
@@ -76,7 +93,14 @@ export class LlmRouterService {
       stream: false,
     }, { timeout: 30_000 });
 
+    if (resp.data?.error) {
+      throw new Error(`Ollama error: ${resp.data.error}`);
+    }
+
     const content = resp.data.message?.content ?? '';
+    if (!content.trim()) {
+      throw new Error('Ollama returned an empty response');
+    }
     return {
       content,
       model: `ollama/${model}`,
@@ -88,11 +112,16 @@ export class LlmRouterService {
   }
 
   private async callOpenAi(req: LlmRequest): Promise<LlmResponse> {
+    const client = this.openai;
+    if (!client) {
+      throw new Error('OPENAI_API_KEY is not configured');
+    }
+
     const model = req.tier === 'premium'
       ? this.cfg.get<string>('OPENAI_MODEL_PREMIUM', 'gpt-4o')
       : this.cfg.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
 
-    const completion = await this.openai.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model,
       messages: this.buildMessages(req),
       max_tokens: req.maxTokens ?? 1024,
@@ -113,9 +142,14 @@ export class LlmRouterService {
   }
 
   private async callClaude(req: LlmRequest): Promise<LlmResponse> {
+    const client = this.anthropic;
+    if (!client) {
+      throw new Error('ANTHROPIC_API_KEY is not configured');
+    }
+
     const model = this.cfg.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-5');
 
-    const msg = await this.anthropic.messages.create({
+    const msg = await client.messages.create({
       model,
       max_tokens: req.maxTokens ?? 1024,
       system: req.systemPrompt,
@@ -151,11 +185,13 @@ export class LlmRouterService {
   async chatStream(req: LlmRequest, onToken: (token: string) => void): Promise<LlmResponse> {
     const tier = req.tier ?? 'auto';
     const tokenEstimate = Math.ceil((req.prompt.length + (req.systemPrompt?.length ?? 0)) / 4);
+    const attemptedErrors: string[] = [];
 
     if (tier === 'fast' || (tier === 'auto' && tokenEstimate < 500)) {
       try {
         return await this.streamOllama(req, onToken);
-      } catch {
+      } catch (e) {
+        attemptedErrors.push(this.describeProviderError('Ollama(stream)', e));
         this.logger.warn('Ollama streaming unavailable, falling back to gpt-4o-mini');
       }
     }
@@ -164,11 +200,19 @@ export class LlmRouterService {
       try {
         return await this.streamOpenAi(req, onToken);
       } catch (e) {
+        attemptedErrors.push(this.describeProviderError('OpenAI(stream)', e));
         this.logger.warn(`OpenAI streaming failed: ${(e as Error).message}, falling back to Claude`);
       }
     }
 
-    return await this.streamClaude(req, onToken);
+    try {
+      return await this.streamClaude(req, onToken);
+    } catch (e) {
+      attemptedErrors.push(this.describeProviderError('Claude(stream)', e));
+      this.logger.error(`Claude streaming failed: ${(e as Error).message}`);
+      this.logger.error(`All LLM stream providers failed. ${attemptedErrors.join(' | ')}`);
+      throw new ServiceUnavailableException('AI service is unavailable. Please configure valid LLM API keys.');
+    }
   }
 
   private async streamOllama(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
@@ -196,6 +240,10 @@ export class LlmRouterService {
           if (!line.trim()) continue;
           try {
             const json = JSON.parse(line);
+            if (json.error) {
+              reject(new Error(`Ollama stream error: ${json.error}`));
+              return;
+            }
             if (json.message?.content) {
               content += json.message.content;
               onToken(json.message.content);
@@ -211,6 +259,10 @@ export class LlmRouterService {
       resp.data.on('error', reject);
     });
 
+    if (!content.trim()) {
+      throw new Error('Ollama stream returned an empty response');
+    }
+
     return {
       content,
       model: `ollama/${model}`,
@@ -222,11 +274,16 @@ export class LlmRouterService {
   }
 
   private async streamOpenAi(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
+    const client = this.openai;
+    if (!client) {
+      throw new Error('OPENAI_API_KEY is not configured');
+    }
+
     const model = req.tier === 'premium'
       ? this.cfg.get<string>('OPENAI_MODEL_PREMIUM', 'gpt-4o')
       : this.cfg.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
 
-    const stream = await this.openai.chat.completions.create({
+    const stream = await client.chat.completions.create({
       model,
       messages: this.buildMessages(req),
       max_tokens: req.maxTokens ?? 1024,
@@ -271,13 +328,18 @@ export class LlmRouterService {
   }
 
   private async streamClaude(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
+    const client = this.anthropic;
+    if (!client) {
+      throw new Error('ANTHROPIC_API_KEY is not configured');
+    }
+
     const model = this.cfg.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-5');
 
     let content = '';
     let inputTokens = 0;
     let outputTokens = 0;
 
-    const stream = this.anthropic.messages.stream({
+    const stream = client.messages.stream({
       model,
       max_tokens: req.maxTokens ?? 1024,
       system: req.systemPrompt,
@@ -308,5 +370,23 @@ export class LlmRouterService {
     const key = Object.keys(COST_TABLE).find(k => model.includes(k)) ?? 'gpt-4o-mini';
     const rates = COST_TABLE[key];
     return (inputTok * rates.input + outputTok * rates.output) / 1_000_000;
+  }
+
+  private isConfigured(value: string | undefined): value is string {
+    return Boolean(value && value.trim().length > 0);
+  }
+
+  private describeProviderError(provider: string, error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const payload = error.response?.data;
+      const detail = typeof payload === 'string'
+        ? payload
+        : payload?.error?.message ?? payload?.error ?? payload?.message;
+      return `${provider}: ${error.message}${status ? ` (status ${status})` : ''}${detail ? ` - ${detail}` : ''}`;
+    }
+
+    const msg = error instanceof Error ? error.message : String(error);
+    return `${provider}: ${msg}`;
   }
 }

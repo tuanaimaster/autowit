@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Bot, CheckCircle2, Lightbulb, Rocket, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -89,12 +89,28 @@ export default function HomePage() {
   const [suggestionTitle, setSuggestionTitle] = useState('');
   const [suggestionDetail, setSuggestionDetail] = useState('');
   const [suggestionTags, setSuggestionTags] = useState('AI, Tự động hóa');
+  const [votedItems, setVotedItems] = useState<Record<string, boolean>>({});
 
   const groupedRoadmap = useMemo(() => {
     return ROADMAP_COLUMNS.map((col) => ({
       ...col,
       items: ROADMAP_ITEMS.filter((item) => item.status === col.status),
     }));
+  }, []);
+
+  const roadmapVoteStorageKey = 'aw_roadmap_votes_v1';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(roadmapVoteStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, boolean>;
+        setVotedItems(parsed);
+      }
+    } catch {
+      // Ignore invalid local vote cache.
+    }
   }, []);
 
   async function handleSuggestionSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -129,6 +145,27 @@ export default function HomePage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleVote(item: RoadmapItem) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('aw_token') : null;
+    if (!token) {
+      toast('Vui lòng đăng nhập để vote roadmap.', { icon: '🔐' });
+      router.push('/login?next=/');
+      return;
+    }
+
+    if (votedItems[item.id]) {
+      toast('Bạn đã vote mục này rồi.', { icon: '✅' });
+      return;
+    }
+
+    const nextVotes = { ...votedItems, [item.id]: true };
+    setVotedItems(nextVotes);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(roadmapVoteStorageKey, JSON.stringify(nextVotes));
+    }
+    toast.success(`Đã vote cho: ${item.title}`);
   }
 
   return (
@@ -203,8 +240,11 @@ export default function HomePage() {
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">{item.description}</p>
                     <div className="mt-3 flex items-center justify-between">
-                      <button className="rounded-md bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-600 transition-colors">
-                        Vote ({item.votes})
+                      <button
+                        onClick={() => handleVote(item)}
+                        className="rounded-md bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-600 transition-colors"
+                      >
+                        Vote ({item.votes + (votedItems[item.id] ? 1 : 0)})
                       </button>
                       <span className="text-[11px] text-muted-foreground">#{item.id}</span>
                     </div>
