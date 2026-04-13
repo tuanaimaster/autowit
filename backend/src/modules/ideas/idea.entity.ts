@@ -24,7 +24,7 @@ export class IdeaEntity {
   @Column({ type: 'jsonb', default: [] })
   tags: string[];
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   agentType: string;
 
   @Column({ type: 'text', nullable: true })

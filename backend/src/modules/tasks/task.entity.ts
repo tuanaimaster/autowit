@@ -28,10 +28,10 @@ export class TaskEntity {
   @Column({ type: 'timestamp', nullable: true })
   dueDate!: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   assigneeId!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   ideaId!: string | null;
 
   @Column({ type: 'jsonb', default: [] })

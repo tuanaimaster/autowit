@@ -31,7 +31,7 @@ export class WorkflowEntity {
   @Column({ type: 'jsonb', default: [] })
   steps!: Array<{ type: string; config: Record<string, unknown> }>;
 
-  @Column({ name: 'n8nWorkflowId', nullable: true })
+  @Column({ name: 'n8nWorkflowId', type: 'text', nullable: true })
   webhookUrl!: string | null;
 
   @Column({ default: 0 })
