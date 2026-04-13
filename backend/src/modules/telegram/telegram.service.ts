@@ -31,11 +31,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     this.registerHandlers();
 
     if (this.webhookMode) {
-      await this.bot.telegram.setWebhook(
-        `${this.cfg.get('FRONTEND_URL')}/api/webhook/telegram`,
-        { secret_token: this.cfg.get('TELEGRAM_WEBHOOK_SECRET') },
-      );
-      this.logger.log('Telegram webhook set');
+      try {
+        await this.bot.telegram.setWebhook(
+          `${this.cfg.get('FRONTEND_URL')}/api/webhook/telegram`,
+          { secret_token: this.cfg.get('TELEGRAM_WEBHOOK_SECRET') },
+        );
+        this.logger.log('Telegram webhook set');
+      } catch (err) {
+        this.logger.error(
+          `Telegram setWebhook failed — running without Telegram: ${(err as Error).message}`,
+        );
+        this.bot = undefined;
+      }
     } else {
       this.bot.launch().catch(e => this.logger.error('Bot launch failed', e));
       this.logger.log('Telegram polling started');
