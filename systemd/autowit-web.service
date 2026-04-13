@@ -1,0 +1,20 @@
+[Unit]
+Description=Autowit AI Platform — Next.js Frontend
+After=network.target autowit-api.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/autowit/frontend
+EnvironmentFile=/autowit/.env
+ExecStart=/usr/bin/node .next/standalone/server.js
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autowit-web
+
+[Install]
+WantedBy=multi-user.target

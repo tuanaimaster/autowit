@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  autowit_postgres:
+    image: postgres:16-alpine
+    container_name: autowit_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: autowit_db
+      POSTGRES_USER: autowit
+      POSTGRES_PASSWORD: autowit_pass
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - autowit_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autowit -d autowit_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  autowit_redis:
+    image: redis:7-alpine
+    container_name: autowit_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --save 60 1
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - autowit_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  autowit_n8n:
+    image: n8nio/n8n:latest
+    container_name: autowit_n8n
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=127.0.0.1
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://autowit.me/n8n/
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=autowit2026
+      - GENERIC_TIMEZONE=Asia/Ho_Chi_Minh
+      - N8N_ENCRYPTION_KEY=autowit_n8n_enc_key_change_me
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - autowit_n8n_data:/home/node/.n8n
+
+volumes:
+  autowit_pg_data:
+  autowit_redis_data:
+  autowit_n8n_data:
