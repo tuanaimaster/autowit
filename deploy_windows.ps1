@@ -181,8 +181,10 @@ export NODE_ENV=production
 
 # Backend
 cd $VpsPath/backend
-npm ci --omit=dev
+npm ci
+rm -rf dist tsconfig.tsbuildinfo
 npm run build
+npm prune --omit=dev
 echo "Backend built ✅"
 
 # Frontend
