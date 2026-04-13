@@ -25,6 +25,9 @@ if [[ "$SKIP_BUILD" != "--skip-build" ]]; then
   cd "$LOCAL_ROOT/frontend"
   npm ci
   npm run build
+  # REQUIRED for output:standalone — copy static assets so Next.js can serve them
+  cp -r .next/static .next/standalone/.next/static
+  [[ -d public ]] && cp -r public .next/standalone/public || true
 else
   echo "[1-2/5] Skipping build (--skip-build)"
 fi
