@@ -146,6 +146,164 @@ export class LlmRouterService {
     return msgs;
   }
 
+  // ── Streaming methods ──────────────────────────────────────────────────────
+
+  async chatStream(req: LlmRequest, onToken: (token: string) => void): Promise<LlmResponse> {
+    const tier = req.tier ?? 'auto';
+    const tokenEstimate = Math.ceil((req.prompt.length + (req.systemPrompt?.length ?? 0)) / 4);
+
+    if (tier === 'fast' || (tier === 'auto' && tokenEstimate < 500)) {
+      try {
+        return await this.streamOllama(req, onToken);
+      } catch {
+        this.logger.warn('Ollama streaming unavailable, falling back to gpt-4o-mini');
+      }
+    }
+
+    if (tier === 'balanced' || tier === 'auto') {
+      try {
+        return await this.streamOpenAi(req, onToken);
+      } catch (e) {
+        this.logger.warn(`OpenAI streaming failed: ${(e as Error).message}, falling back to Claude`);
+      }
+    }
+
+    return await this.streamClaude(req, onToken);
+  }
+
+  private async streamOllama(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
+    const base = this.cfg.get<string>('OLLAMA_BASE_URL', 'http://localhost:11434');
+    const model = this.cfg.get<string>('OLLAMA_MODEL', 'llama3.2:3b');
+    const messages = this.buildMessages(req);
+
+    const resp = await axios.post(
+      `${base}/api/chat`,
+      { model, messages, stream: true },
+      { timeout: 60_000, responseType: 'stream' },
+    );
+
+    let content = '';
+    let promptEvalCount = 0;
+    let evalCount = 0;
+
+    await new Promise<void>((resolve, reject) => {
+      let buffer = '';
+      resp.data.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            if (json.message?.content) {
+              content += json.message.content;
+              onToken(json.message.content);
+            }
+            if (json.done) {
+              promptEvalCount = json.prompt_eval_count ?? 0;
+              evalCount = json.eval_count ?? 0;
+            }
+          } catch { /* ignore partial JSON */ }
+        }
+      });
+      resp.data.on('end', resolve);
+      resp.data.on('error', reject);
+    });
+
+    return {
+      content,
+      model: `ollama/${model}`,
+      inputTokens: promptEvalCount,
+      outputTokens: evalCount,
+      costUsd: 0,
+      tier: 'fast',
+    };
+  }
+
+  private async streamOpenAi(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
+    const model = req.tier === 'premium'
+      ? this.cfg.get<string>('OPENAI_MODEL_PREMIUM', 'gpt-4o')
+      : this.cfg.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
+
+    const stream = await this.openai.chat.completions.create({
+      model,
+      messages: this.buildMessages(req),
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.7,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    let content = '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? '';
+      if (delta) {
+        content += delta;
+        onToken(delta);
+      }
+
+      const usage = (chunk as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+      if (usage) {
+        promptTokens = usage.prompt_tokens ?? promptTokens;
+        completionTokens = usage.completion_tokens ?? completionTokens;
+      }
+    }
+
+    if (!promptTokens && !completionTokens) {
+      promptTokens = Math.ceil((req.prompt.length + (req.systemPrompt?.length ?? 0)) / 4);
+      completionTokens = Math.ceil(content.length / 4);
+    }
+
+    const cost = this.calcCost(model, promptTokens, completionTokens);
+
+    return {
+      content,
+      model,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+      costUsd: cost,
+      tier: req.tier ?? 'balanced',
+    };
+  }
+
+  private async streamClaude(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse> {
+    const model = this.cfg.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-5');
+
+    let content = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    const stream = this.anthropic.messages.stream({
+      model,
+      max_tokens: req.maxTokens ?? 1024,
+      system: req.systemPrompt,
+      messages: [{ role: 'user', content: req.prompt }],
+    });
+
+    stream.on('text', (text) => {
+      content += text;
+      onToken(text);
+    });
+
+    const finalMsg = await stream.finalMessage();
+    inputTokens = finalMsg.usage.input_tokens;
+    outputTokens = finalMsg.usage.output_tokens;
+    const cost = this.calcCost(model, inputTokens, outputTokens);
+
+    return {
+      content,
+      model,
+      inputTokens,
+      outputTokens,
+      costUsd: cost,
+      tier: 'premium',
+    };
+  }
+
   private calcCost(model: string, inputTok: number, outputTok: number): number {
     const key = Object.keys(COST_TABLE).find(k => model.includes(k)) ?? 'gpt-4o-mini';
     const rates = COST_TABLE[key];

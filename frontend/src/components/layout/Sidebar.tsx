@@ -12,12 +12,14 @@ const NAV_ITEMS = [
   { href: '/chat',      label: 'Chat',      icon: MessageSquare },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo },
   { href: '/workflows', label: 'Workflows', icon: Zap },
-  { href: '/admin',     label: 'Admin',     icon: Settings },
 ];
+
+const ADMIN_NAV_ITEM = { href: '/admin', label: 'Admin', icon: Settings };
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const navItems = user?.role === 'admin' ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <aside className="flex flex-col w-56 shrink-0 h-screen bg-surface-subtle border-r border-surface-border px-3 py-4">
@@ -31,7 +33,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+        {navItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}

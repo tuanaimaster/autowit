@@ -1,10 +1,11 @@
 [Unit]
 Description=Autowit AI Platform — Next.js Frontend
 After=network.target autowit-api.service
+Requires=autowit-api.service
 
 [Service]
 Type=simple
-User=root
+User=autowit
 WorkingDirectory=/autowit/frontend
 EnvironmentFile=/autowit/.env
 ExecStart=/usr/bin/node .next/standalone/server.js

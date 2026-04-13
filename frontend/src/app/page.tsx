@@ -20,48 +20,48 @@ interface RoadmapItem {
 const ROADMAP_ITEMS: RoadmapItem[] = [
   {
     id: 'rw-001',
-    title: 'Kết nối ngân hàng tự động',
-    description: 'Đồng bộ giao dịch từ tài khoản ngân hàng qua API để phân loại tức thì.',
+    title: 'Workflow builder kéo-thả',
+    description: 'Thiết kế luồng tự động nhiều bước với trigger, condition và action không cần code.',
     votes: 15,
     tag: 'Tính năng',
     status: 'backlog',
   },
   {
     id: 'rw-002',
-    title: 'Scan hóa đơn bằng AI',
-    description: 'OCR tự động trích xuất dữ liệu chi tiêu từ hóa đơn và biên lai.',
+    title: 'Template tự động hóa theo ngành',
+    description: 'Bộ template sẵn cho marketing, CSKH, vận hành và sales để triển khai nhanh.',
     votes: 8,
     tag: 'Tính năng',
     status: 'backlog',
   },
   {
     id: 'rw-003',
-    title: 'Bot command theo giọng nói',
-    description: 'Gửi lệnh nhanh qua Telegram, bot parse ý định và tạo giao dịch.',
+    title: 'Trigger đa kênh: Form, Email, Telegram',
+    description: 'Khởi chạy workflow từ nhiều nguồn sự kiện và đồng bộ về một luồng xử lý thống nhất.',
     votes: 12,
-    tag: 'Tính năng',
+    tag: 'Tích hợp',
     status: 'todo',
   },
   {
     id: 'rw-004',
-    title: 'Bot nhắc chi tiêu thông minh',
-    description: 'Cảnh báo khi vượt ngân sách theo nhóm chi và ngữ cảnh cá nhân.',
+    title: 'AI Agent phân loại và trả lời ticket',
+    description: 'Agent tự đọc ngữ cảnh, gán nhãn yêu cầu và đề xuất phản hồi theo playbook của team.',
     votes: 15,
-    tag: 'AI',
+    tag: 'AI Agent',
     status: 'todo',
   },
   {
     id: 'rw-005',
-    title: 'Tích hợp Telegram bot với FreedomWallet',
-    description: 'Liên kết luồng chat để đề xuất hành động tài chính ngay trong hội thoại.',
+    title: 'Orchestration n8n + Webhook hub',
+    description: 'Điều phối workflow liên dịch vụ, retry thông minh và theo dõi trạng thái realtime.',
     votes: 18,
     tag: 'Tích hợp',
     status: 'in_development',
   },
   {
     id: 'rw-006',
-    title: 'Mobile asset price updates',
-    description: 'Cập nhật giá tài sản theo thời gian thực trên giao diện mobile.',
+    title: 'Dashboard SLA và hiệu suất tác vụ',
+    description: 'Theo dõi thời gian xử lý, tỷ lệ thành công và cảnh báo nghẽn luồng theo thời gian thực.',
     votes: 9,
     tag: 'Sửa đổi',
     status: 'done',
@@ -138,14 +138,14 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-brand-400/40 bg-brand-900/20 px-3 py-1 text-xs text-brand-200">
             <Sparkles className="h-3.5 w-3.5" />
-            Nền tảng AI vận hành tài chính thông minh cho cá nhân và đội nhóm
+            Nền tảng AI tự động hóa vận hành cho team sản phẩm, marketing và ops
           </div>
 
           <h1 className="mt-5 max-w-3xl text-3xl font-bold leading-tight md:text-5xl">
-            Autowit giúp bạn quản lý tài chính, tự động hóa tác vụ và phát triển sản phẩm theo góp ý người dùng.
+            Autowit giúp đội ngũ tự động hóa quy trình, kết nối hệ thống và triển khai AI agent nhanh hơn.
           </h1>
           <p className="mt-4 max-w-2xl text-sm text-muted-foreground md:text-base">
-            Theo dõi roadmap real-time, đề xuất tính năng mới, ưu tiên bằng vote và nhận trợ lý AI hỗ trợ ra quyết định nhanh hơn.
+            Theo dõi roadmap real-time, đề xuất tính năng mới, ưu tiên bằng vote và quản trị tiến độ triển khai trên một dashboard thống nhất.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -257,7 +257,7 @@ export default function HomePage() {
               value={suggestionTitle}
               onChange={(e) => setSuggestionTitle(e.target.value)}
               className="input w-full"
-              placeholder="Ví dụ: Đồng bộ ngân hàng theo thời gian thực"
+              placeholder="Ví dụ: Tự động tạo task từ form khách hàng"
               required
             />
           </div>

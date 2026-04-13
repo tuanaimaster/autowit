@@ -76,4 +76,40 @@ export abstract class BaseAgent {
       agentName: this.name,
     };
   }
+
+  async runStream(userMessage: string, ctx: AgentContext, onToken: (token: string) => void): Promise<AgentResult> {
+    const history = await this.memory.getHistory(ctx.sessionId);
+
+    // Return cached result immediately (replay as single token)
+    const cached = await this.cache.get(userMessage, this.systemPrompt, this.defaultTier);
+    if (cached) {
+      onToken(cached);
+      return { response: cached, model: 'cache', costUsd: 0, cached: true, agentName: this.name };
+    }
+
+    const { fullPrompt, systemPrompt } = this.compressor.buildPrompt(
+      this.systemPrompt,
+      history,
+      userMessage,
+    );
+
+    const llmResp = await this.llm.chatStream(
+      { prompt: fullPrompt, systemPrompt, tier: this.defaultTier },
+      onToken,
+    );
+
+    await Promise.all([
+      this.memory.addExchange(ctx.sessionId, userMessage, llmResp.content),
+      this.cache.set(userMessage, llmResp.content, this.systemPrompt, this.defaultTier),
+      this.costTracker.track(llmResp.model, llmResp.inputTokens, llmResp.outputTokens, llmResp.costUsd),
+    ]);
+
+    return {
+      response: llmResp.content,
+      model: llmResp.model,
+      costUsd: llmResp.costUsd,
+      cached: false,
+      agentName: this.name,
+    };
+  }
 }

@@ -1,5 +1,6 @@
 import {
   Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn,
+  Index,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 
@@ -7,47 +8,48 @@ export type WorkflowStatus = 'active' | 'inactive' | 'draft';
 export type WorkflowTrigger = 'manual' | 'schedule' | 'webhook' | 'telegram';
 
 @Entity('workflows')
+@Index('IDX_WORKFLOW_USER_STATUS_UPDATED', ['userId', 'status', 'updatedAt'])
 export class WorkflowEntity {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description!: string | null;
 
   @Column({ default: 'draft' })
-  status: WorkflowStatus;
+  status!: WorkflowStatus;
 
   @Column({ default: 'manual' })
-  trigger: WorkflowTrigger;
+  trigger!: WorkflowTrigger;
 
   @Column({ type: 'jsonb', default: {} })
-  triggerConfig: Record<string, unknown>;
+  triggerConfig!: Record<string, unknown>;
 
   @Column({ type: 'jsonb', default: [] })
-  steps: Array<{ type: string; config: Record<string, unknown> }>;
+  steps!: Array<{ type: string; config: Record<string, unknown> }>;
 
-  @Column({ nullable: true })
-  n8nWorkflowId: string;
+  @Column({ name: 'n8nWorkflowId', nullable: true })
+  webhookUrl!: string | null;
 
   @Column({ default: 0 })
-  runCount: number;
+  runCount!: number;
 
   @Column({ type: 'timestamp', nullable: true })
-  lastRunAt: Date;
+  lastRunAt!: Date | null;
 
   @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: UserEntity;
+  user!: UserEntity;
 
   @Column()
-  userId: string;
+  userId!: string;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

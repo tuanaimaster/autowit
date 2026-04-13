@@ -60,4 +60,33 @@ export class AiService {
 
     return agent.run(message, ctx);
   }
+
+  async chatStream(
+    message: string,
+    ctx: AgentContext,
+    onToken: (token: string) => void,
+    agentOverride?: AgentName,
+  ): Promise<AgentResult> {
+    if (agentOverride && this.agentMap[agentOverride]) {
+      return this.agentMap[agentOverride].runStream(message, ctx, onToken);
+    }
+
+    // Meta-controller is sync (routing only — quick, no streaming needed)
+    const routing = await this.meta.route(message, ctx);
+
+    if (routing.state === 'CLARIFY' || !routing.agentName) {
+      const reply = routing.clarifyQuestion ?? 'Could you tell me more about what you need?';
+      onToken(reply);
+      return { response: reply, model: 'meta-controller', costUsd: 0, cached: false, agentName: 'meta-controller' };
+    }
+
+    const agent = this.agentMap[routing.agentName as AgentName];
+    if (!agent) {
+      const reply = 'I could not determine the right tool for your request.';
+      onToken(reply);
+      return { response: reply, model: 'meta-controller', costUsd: 0, cached: false, agentName: 'meta-controller' };
+    }
+
+    return agent.runStream(message, ctx, onToken);
+  }
 }

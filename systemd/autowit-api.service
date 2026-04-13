@@ -1,15 +1,16 @@
 [Unit]
 Description=Autowit AI Platform — NestJS API
-After=network.target docker.service
-Wants=docker.service
+After=network.target docker.service network-online.target
+Requires=docker.service
 
 [Service]
 Type=simple
-User=root
+User=autowit
 WorkingDirectory=/autowit/backend
 EnvironmentFile=/autowit/.env
+ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/node dist/main.js
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

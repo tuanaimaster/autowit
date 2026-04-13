@@ -1,8 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, ChevronDown } from 'lucide-react';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
-import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 type Agent = 'auto' | 'code' | 'content' | 'sales' | 'automation';
@@ -33,11 +32,18 @@ export default function ChatPage() {
   const [agent, setAgent] = useState<Agent>('auto');
   const [streaming, setStreaming] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const sessionId = user?.id ?? 'anon';
+  const abortRef = useRef<AbortController | null>(null);
+  const sessionId = user?.id;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   async function send() {
     if (!input.trim() || loading) return;
@@ -46,8 +52,13 @@ export default function ChatPage() {
     setInput('');
     setLoading(true);
     setStreaming('');
+    let controller: AbortController | null = null;
 
     try {
+      abortRef.current?.abort();
+      controller = new AbortController();
+      abortRef.current = controller;
+
       // Use streaming endpoint
       const response = await fetch('/api/ai/chat/stream', {
         method: 'POST',
@@ -55,6 +66,7 @@ export default function ChatPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('aw_token')}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           message: userMsg.content,
           sessionId,
@@ -62,20 +74,42 @@ export default function ChatPage() {
         }),
       });
 
-      const reader = response.body!.getReader();
+      if (!response.ok || !response.body) {
+        throw new Error(`Streaming request failed with status ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
       let meta: { model?: string; costUsd?: number } = {};
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        for (const line of chunk.split('\n')) {
+        if (controller.signal.aborted) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n');
+        buffer = parts.pop() ?? '';
+
+        for (const line of parts) {
           if (!line.startsWith('data: ')) continue;
           const json = JSON.parse(line.slice(6));
           if (json.token) { fullText += json.token; setStreaming(fullText); }
           if (json.done) { meta = { model: json.model, costUsd: json.costUsd }; }
+        }
+      }
+
+      const tail = buffer.trim();
+      if (tail.startsWith('data: ')) {
+        const json = JSON.parse(tail.slice(6));
+        if (json.token) {
+          fullText += json.token;
+          setStreaming(fullText);
+        }
+        if (json.done) {
+          meta = { model: json.model, costUsd: json.costUsd };
         }
       }
 
@@ -87,13 +121,20 @@ export default function ChatPage() {
       };
       setMessages(prev => [...prev, assistantMsg]);
       setStreaming('');
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: 'Error: Could not get a response. Please try again.',
       }]);
     } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setLoading(false);
     }
   }

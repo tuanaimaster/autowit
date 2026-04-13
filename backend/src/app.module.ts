@@ -50,6 +50,8 @@ import { HealthModule } from './modules/health/health.module';
         url: cfg.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: cfg.get('NODE_ENV') !== 'production',
+        migrations: [`${__dirname}/migrations/*{.ts,.js}`],
+        migrationsRun: cfg.get('NODE_ENV') === 'production',
         logging: cfg.get('NODE_ENV') === 'development',
         ssl: cfg.get('NODE_ENV') === 'production'
           ? { rejectUnauthorized: false }

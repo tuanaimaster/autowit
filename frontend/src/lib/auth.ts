@@ -18,7 +18,12 @@ export const useAuth = create<AuthState>((set) => ({
     const token = localStorage.getItem('aw_token');
     const userRaw = localStorage.getItem('aw_user');
     if (token && userRaw) {
-      set({ token, user: JSON.parse(userRaw) });
+      try {
+        set({ token, user: JSON.parse(userRaw) });
+      } catch {
+        localStorage.removeItem('aw_token');
+        localStorage.removeItem('aw_user');
+      }
     }
   },
 

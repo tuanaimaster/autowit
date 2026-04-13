@@ -4,6 +4,7 @@ import { Plus, Loader2, Play, Zap, Globe } from 'lucide-react';
 import { useState } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 interface Workflow {
   id: string; name: string; description?: string; status: 'active' | 'inactive' | 'draft';
@@ -21,7 +22,7 @@ export default function WorkflowsPage() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
 
-  const { data: workflows, isLoading } = useQuery<Workflow[]>({
+  const { data: workflows, isLoading, isError, error, refetch } = useQuery<Workflow[]>({
     queryKey: ['workflows'],
     queryFn: () => api.get('/workflows').then(r => r.data),
   });
@@ -29,12 +30,19 @@ export default function WorkflowsPage() {
   const createMutation = useMutation({
     mutationFn: (name: string) => api.post('/workflows', { name }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['workflows'] }); setNewName(''); setCreating(false); toast.success('Workflow created'); },
+    onError: (err: unknown) => {
+      const message = axios.isAxiosError(err) ? (err.response?.data?.message ?? err.message) : 'Could not create workflow';
+      toast.error(Array.isArray(message) ? message.join(', ') : String(message));
+    },
   });
 
   const executeMutation = useMutation({
     mutationFn: (id: string) => api.post(`/workflows/${id}/execute`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['workflows'] }); toast.success('Workflow executed'); },
-    onError: () => toast.error('Execution failed'),
+    onError: (err: unknown) => {
+      const message = axios.isAxiosError(err) ? (err.response?.data?.message ?? err.message) : 'Execution failed';
+      toast.error(Array.isArray(message) ? message.join(', ') : String(message));
+    },
   });
 
   return (
@@ -59,6 +67,14 @@ export default function WorkflowsPage() {
 
       {isLoading ? (
         <div className="flex justify-center pt-16"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
+      ) : isError ? (
+        <div className="card p-6 max-w-lg">
+          <p className="text-sm text-white">Could not load workflows.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {axios.isAxiosError(error) ? (error.response?.data?.message ?? error.message) : 'Please check your connection and try again.'}
+          </p>
+          <button onClick={() => refetch()} className="btn-primary text-sm mt-4">Retry</button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {(workflows ?? []).map((wf: Workflow) => (

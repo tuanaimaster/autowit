@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Loader2, CheckCircle2, Circle, Clock, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -29,7 +30,7 @@ export default function TasksPage() {
   const [newTitle, setNewTitle] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const { data: kanban, isLoading } = useQuery<Record<TaskStatus, Task[]>>({
+  const { data: kanban, isLoading, isError, error, refetch } = useQuery<Record<TaskStatus, Task[]>>({
     queryKey: ['kanban'],
     queryFn: () => api.get('/tasks/kanban').then(r => r.data),
   });
@@ -37,11 +38,16 @@ export default function TasksPage() {
   const createMutation = useMutation({
     mutationFn: (title: string) => api.post('/tasks', { title }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['kanban'] }); setNewTitle(''); setCreating(false); toast.success('Task created'); },
+    onError: (err: unknown) => {
+      const message = axios.isAxiosError(err) ? (err.response?.data?.message ?? err.message) : 'Could not create task';
+      toast.error(Array.isArray(message) ? message.join(', ') : String(message));
+    },
   });
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => api.patch(`/tasks/${id}/status`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kanban'] }),
+    onError: () => toast.error('Could not update task status'),
   });
 
   return (
@@ -71,6 +77,14 @@ export default function TasksPage() {
 
       {isLoading ? (
         <div className="flex justify-center pt-16"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
+      ) : isError ? (
+        <div className="card p-6 max-w-lg">
+          <p className="text-sm text-white">Could not load tasks.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {axios.isAxiosError(error) ? (error.response?.data?.message ?? error.message) : 'Please check your connection and try again.'}
+          </p>
+          <button onClick={() => refetch()} className="btn-primary text-sm mt-4">Retry</button>
+        </div>
       ) : (
         <div className="grid grid-cols-4 gap-4">
           {COLUMNS.map(({ key, label, icon: Icon, color }) => (

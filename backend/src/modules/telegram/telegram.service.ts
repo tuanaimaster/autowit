@@ -9,8 +9,8 @@ type AgentName = 'code' | 'content' | 'sales' | 'automation';
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
-  private bot: Telegraf;
-  private webhookMode: boolean;
+  private bot?: Telegraf<Context>;
+  private webhookMode = false;
 
   constructor(
     private cfg: ConfigService,
@@ -49,6 +49,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   private registerHandlers() {
+    if (!this.bot) {
+      return;
+    }
+
     this.bot.start(ctx => this.handleStart(ctx));
     this.bot.help(ctx => ctx.reply(HELP_TEXT));
 
@@ -113,9 +117,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (expectedSecret && secret !== expectedSecret) {
       throw new Error('Invalid webhook secret');
     }
-    if (this.bot) {
-      await this.bot.handleUpdate(update as Parameters<typeof this.bot.handleUpdate>[0]);
+    if (!this.bot) {
+      throw new Error('Telegram bot is not initialized');
     }
+    await this.bot.handleUpdate(update as Parameters<NonNullable<typeof this.bot>['handleUpdate']>[0]);
   }
 }
 

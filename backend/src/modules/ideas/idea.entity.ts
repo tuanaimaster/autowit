@@ -1,11 +1,13 @@
 import {
   Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn,
+  Index,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 
 export type IdeaStatus = 'draft' | 'active' | 'archived';
 
 @Entity('ideas')
+@Index('IDX_IDEA_USER_STATUS_UPDATED', ['userId', 'status', 'updatedAt'])
 export class IdeaEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

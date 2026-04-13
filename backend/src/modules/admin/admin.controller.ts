@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UsersService } from '../users/users.service';
 import { CostTrackerService } from '../../core/cost-tracker/cost-tracker.service';
@@ -17,13 +17,13 @@ export class AdminController {
 
   @Get('users')
   getUsers(@Request() req: any) {
-    if (!isAdmin(req)) return { error: 'Forbidden' };
+    if (!isAdmin(req)) throw new ForbiddenException('Forbidden');
     return this.users.list();
   }
 
   @Get('stats')
   async getStats(@Request() req: any) {
-    if (!isAdmin(req)) return { error: 'Forbidden' };
+    if (!isAdmin(req)) throw new ForbiddenException('Forbidden');
     const [today, weekly] = await Promise.all([
       this.costs.getDailyStats(),
       this.costs.getWeeklyTotal(),

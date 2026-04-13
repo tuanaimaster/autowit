@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -48,22 +48,26 @@ export class WorkflowsService {
 
   async execute(id: string, userId: string, payload?: Record<string, unknown>): Promise<unknown> {
     const wf = await this.findOne(id, userId);
-    if (wf.n8nWorkflowId) {
-      const n8nUrl = this.cfg.get<string>('N8N_BASE_URL', 'http://127.0.0.1:5678');
-      const n8nKey = this.cfg.get<string>('N8N_API_KEY', '');
-      const resp = await axios.post(
-        `${n8nUrl}/api/v1/workflows/${wf.n8nWorkflowId}/execute`,
-        { workflowData: { nodes: [], connections: {} }, startNodes: [], data: { main: [[{ json: payload ?? {} }]] } },
-        { headers: { 'X-N8N-API-KEY': n8nKey } },
-      );
-      wf.runCount += 1;
+    if (wf.webhookUrl) {
+      let resp;
+      try {
+        resp = await axios.post(
+          wf.webhookUrl,
+          payload ?? {},
+          { timeout: 30_000 },
+        );
+      } catch (error) {
+        throw new BadGatewayException(`Failed to trigger n8n webhook: ${(error as Error).message}`);
+      }
+
+      wf.runCount = (wf.runCount ?? 0) + 1;
       wf.lastRunAt = new Date();
       await this.repo.save(wf);
       return resp.data;
     }
-    wf.runCount += 1;
+    wf.runCount = (wf.runCount ?? 0) + 1;
     wf.lastRunAt = new Date();
     await this.repo.save(wf);
-    return { status: 'executed', workflowId: id, steps: wf.steps.length };
+    return { status: 'executed', workflowId: id, steps: wf.steps?.length ?? 0 };
   }
 }

@@ -9,6 +9,9 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix",
+    "migration:run": "npm run build && typeorm migration:run -d dist/data-source.js",
+    "migration:revert": "npm run build && typeorm migration:revert -d dist/data-source.js",
+    "migration:show": "npm run build && typeorm migration:show -d dist/data-source.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage"

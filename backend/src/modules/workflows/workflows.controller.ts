@@ -2,7 +2,74 @@ import {
   Controller, Get, Post, Put, Delete, Param, Body, UseGuards, Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { IsArray, IsEnum, IsObject, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { WorkflowsService, CreateWorkflowDto } from './workflows.service';
+
+class WorkflowStepBody {
+  @IsString()
+  @MinLength(1)
+  type!: string;
+
+  @IsObject()
+  config!: Record<string, unknown>;
+}
+
+class CreateWorkflowBody implements CreateWorkflowDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsEnum(['manual', 'schedule', 'webhook', 'telegram'])
+  trigger?: CreateWorkflowDto['trigger'];
+
+  @IsOptional()
+  @IsObject()
+  triggerConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  steps?: WorkflowStepBody[];
+}
+
+class UpdateWorkflowBody {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsEnum(['manual', 'schedule', 'webhook', 'telegram'])
+  trigger?: CreateWorkflowDto['trigger'];
+
+  @IsOptional()
+  @IsObject()
+  triggerConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  steps?: WorkflowStepBody[];
+
+  @IsOptional()
+  @IsEnum(['active', 'inactive', 'draft'])
+  status?: 'active' | 'inactive' | 'draft';
+
+  @IsOptional()
+  @IsString()
+  webhookUrl?: string;
+}
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('workflows')
@@ -13,7 +80,7 @@ export class WorkflowsController {
   list(@Request() req: any) { return this.svc.findAll(req.user.userId); }
 
   @Post()
-  create(@Request() req: any, @Body() dto: CreateWorkflowDto) {
+  create(@Request() req: any, @Body() dto: CreateWorkflowBody) {
     return this.svc.create(req.user.userId, dto);
   }
 
@@ -23,7 +90,7 @@ export class WorkflowsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Request() req: any, @Body() dto: Partial<CreateWorkflowDto>) {
+  update(@Param('id') id: string, @Request() req: any, @Body() dto: UpdateWorkflowBody) {
     return this.svc.update(id, req.user.userId, dto);
   }
 
